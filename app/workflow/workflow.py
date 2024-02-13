@@ -6,7 +6,7 @@ from sqlalchemy import func
 from sqlalchemy import text
 
 api_getworkflow_blueprint = Blueprint('api_getTRXCURFUND', __name__)
-
+api_getOptevtRules_blueprint = Blueprint('getOptevtRules', __name__)
 @api_getworkflow_blueprint.route('/workflow/<string:fund>', methods=['GET'])
 def filter_data_for_fund_and_date_range(fund):
     try:
@@ -147,7 +147,6 @@ ORDER BY pp.fund, pp.process_name, pp.day_of_week
 
         # Use SQLAlchemy's text method to bind parameters
         sql_query = text(query)
-
         # Bind parameters to the query using params method
         result = connection.execute(sql_query.params(fund=fund))
 
@@ -163,6 +162,127 @@ ORDER BY pp.fund, pp.process_name, pp.day_of_week
         connection.close()
 
         return jsonify({'fund_data': fund_data_list})
+    except Exception as e:
+        # Log the exception stack trace for debugging
+        print(f"Error in filter_data_for_fund_and_date_range: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@api_getOptevtRules_blueprint.route('/getOptevtRules', methods=['POST'])
+def filter_data_for_fund_and_date_range():
+    try:
+        # Get JSON data from the request
+        request_data = request.get_json()
+
+        # Extract parameters from JSON data
+        fund = request_data.get('fund')
+        start_date = request_data.get('start_date')
+        end_date = request_data.get('end_date')
+
+        connection = get_shared_connection()
+
+        query = """
+    WITH FundDateRange AS (
+    SELECT
+        f.fund,
+        n.start_date AS dynamic_start_date,
+        n.end_date AS dynamic_end_date
+    FROM
+        Fndmas f
+    INNER JOIN
+        navper n ON n.fund = f.np_fnd
+    WHERE
+        n.end_date = (
+            SELECT MIN(m.end_date)
+            FROM navper m
+            WHERE m.fund = f.np_fnd
+              AND m.end_date <= (SYSDATE + 62)
+              AND m.close = 'N'
+        )
+        AND n.close = 'N'
+        AND f.fund = 'MFE'
+),
+DateSeries (process_date) AS (
+    SELECT dynamic_start_date
+    FROM FundDateRange
+    UNION ALL
+    SELECT process_date + 1
+    FROM DateSeries
+    WHERE process_date + 1 <= (SELECT dynamic_end_date FROM FundDateRange)
+),
+LatestCompleteEvents AS (
+    SELECT
+        i.fund,
+        i.rule_id,
+        MAX(TO_TIMESTAMP(i.datestamp, 'DD-MON-YY HH24.MI.SS.FF')) AS latest_end_time
+    FROM
+        OPTEVT i
+    WHERE
+        i.complete = 1 
+        AND i.start_date BETWEEN TO_DATE(:start_date, 'MM/DD/YYYY') AND TO_DATE(:end_date, 'MM/DD/YYYY') -- Updated date range
+    GROUP BY
+        i.fund, i.rule_id
+),
+TotalCountByConditions AS (
+    SELECT
+        fund,
+        rule_id,
+        start_date,
+        COUNT(*) AS total_count
+    FROM
+        OPTEVT
+    WHERE
+  start_date BETWEEN TO_DATE(:start_date, 'MM/DD/YYYY') AND TO_DATE(:end_date, 'MM/DD/YYYY')
+    GROUP BY
+        fund, rule_id, start_date
+)
+SELECT
+    o.fund,
+    o.rule_id,
+    o.start_date,
+    TO_CHAR(MIN(TO_TIMESTAMP(o.datestamp, 'DD-MON-YY HH24.MI.SS.FF')), 'HH:MI:SS AM') AS start_time,
+    TO_CHAR(MAX(TO_TIMESTAMP(o.datestamp, 'DD-MON-YY HH24.MI.SS.FF')), 'HH:MI:SS AM') AS end_time,
+    COUNT(CASE WHEN o.complete = 1 THEN 1 END) AS complete_count,
+    tc.total_count,
+    TO_CHAR(lce.latest_end_time, 'HH:MI:SS AM') AS latest_complete_optevt,
+    CASE
+        WHEN lce.latest_end_time IS NOT NULL
+            AND MAX(CASE WHEN o.complete = 1 THEN TO_TIMESTAMP(o.datestamp, 'DD-MON-YY HH24.MI.SS.FF') END) IS NOT NULL
+            AND COUNT(CASE WHEN o.complete = 1 THEN 1 END) = tc.total_count -- Check if complete_count is equal to total_count
+        THEN 'All exceptions closed'
+        ELSE 'Exceptions still open'
+    END AS exception_status
+FROM
+    OPTEVT o
+LEFT JOIN
+    LatestCompleteEvents lce ON o.fund = lce.fund AND o.rule_id = lce.rule_id
+LEFT JOIN
+    TotalCountByConditions tc ON o.fund = tc.fund AND o.rule_id = tc.rule_id AND o.start_date = tc.start_date
+JOIN
+    DateSeries ds ON o.start_date = ds.process_date
+WHERE
+    o.start_date BETWEEN TO_DATE(:start_date, 'MM/DD/YYYY') AND TO_DATE(:end_date, 'MM/DD/YYYY')
+AND o.fund = :fund
+GROUP BY o.fund, o.rule_id, lce.latest_end_time, o.start_date, tc.total_count
+"""
+
+        # Use SQLAlchemy's text method to bind parameters
+        sql_query = text(query)
+
+        # Bind parameters to the query using params method
+        result = connection.execute(sql_query.params(fund=fund, start_date=start_date, end_date=end_date))
+
+        fund_data = result.fetchall()
+
+        # Get the column names from the result set
+        columns = result.keys()
+
+        # Convert the result into a list of dictionaries
+        optevt_data_list = [dict(zip(columns, row)) for row in fund_data]
+
+        # Close the connection
+        connection.close()
+
+        return jsonify({'optevt': optevt_data_list})
     except Exception as e:
         # Log the exception stack trace for debugging
         print(f"Error in filter_data_for_fund_and_date_range: {str(e)}")

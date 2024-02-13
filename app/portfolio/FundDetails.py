@@ -18,13 +18,14 @@ api_getFndmas_blueprint = Blueprint('api_get_fndmas', __name__)
 api_getNAVHSTFndmas_blueprint = Blueprint('api_get_Navhstfndmas', __name__)
 api_getALLFndmas_blueprint= Blueprint('api_getALLFndmas', __name__)
 api_getALLPrices_blueprint = Blueprint('api_getALLPrices', __name__)
-
+api_getCashMovement_blueprint = Blueprint('api_getCashMovement', __name__)
 api_getQtyMovement_blueprint= Blueprint('api_getQtyMovement', __name__)
 CORS(api_getQtyMovement_blueprint)
 CORS(api_getALLFndmas_blueprint)
 CORS(api_getFndmas_blueprint)
 CORS(api_getNAVHSTFndmas_blueprint)
 CORS(api_getALLPrices_blueprint)
+CORS(api_getCashMovement_blueprint)
 
 logging.basicConfig()
 logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
@@ -336,3 +337,116 @@ ORDER BY TRADE_DATE
         # Log the exception stack trace for debugging
         print(f"Error in filter_data_for_fund_and_date_range: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+@api_getCashMovement_blueprint.route('/getCash/<string:fund>/<string:tkr>', methods=['GET'])
+def getCashMovement_blueprint(tkr,fund):
+    try:
+        connection = get_shared_connection()
+        query = """
+     
+     SELECT 
+        TC.FUND, 
+        TC.TKR, 
+        TC.TAXLOT_ID,
+        TC.TRADE_DATE,
+        TC.price, 
+NVL(SUM(
+             CASE WHEN (T.BUY_SELL='S')
+                  THEN
+                    CASE WHEN T.TRXTYP  NOT IN ('1122','1123','1330')
+                         THEN
+                            CASE WHEN (TC.REVFLG='N' OR TC.REVFLG IS NULL)
+                                 THEN
+                                      TC.LOCAL_BOOK
+                                 ELSE
+                                     -TC.LOCAL_BOOK
+                            END
+                    END
+             ELSE
+                   CASE WHEN ((T.BUY_SELL IS NULL) AND (T.TRXTYP = '1128'))
+                       THEN
+                            CASE WHEN (TC.REVFLG='N' OR TC.REVFLG IS NULL)
+                                 THEN
+                                   TC.LOCAL_BOOK
+                 ELSE
+                                   -TC.LOCAL_BOOK
+                            END
+                   END
+             END),0)
+             - NVL(SUM( CASE
+               WHEN T.TRXTYP IN ('1115','1125','1135','1145') THEN
+                          CASE WHEN (TC.REVFLG='N' OR TC.REVFLG IS NULL) THEN
+                               NVL(ROUND(opt.LOCAL_BOOK*TC.QTY/opt.QTY/NVL(S2.CONV_RATIO, 1), s.lcl_m_decs),0)
+                          ELSE
+                                -NVL(ROUND(opt.LOCAL_BOOK*TC.QTY/opt.QTY/NVL(S2.CONV_RATIO, 1), s.lcl_m_decs),0)
+                          END
+               ELSE 0 END),0 )
+             -
+         NVL(SUM(
+            CASE WHEN (T.BUY_SELL = 'S') THEN
+                    CASE WHEN (T.TRXTYP IN ('1330')) THEN
+                           - TC.LOCAL_BOOK
+                   end
+            ELSE
+               CASE WHEN (T.BUY_SELL = 'B')
+                    THEN
+                       CASE WHEN (TC.REVFLG='N' OR TC.REVFLG IS NULL)
+                            THEN
+                                TC.LOCAL_BOOK
+                            ELSE
+                               -TC.LOCAL_BOOK
+                       END
+            ELSE
+               CASE WHEN (T.BUY_SELL IS NULL AND (T.ACCINC='N'))
+                    THEN
+            CASE WHEN (T.TRXTYP NOT IN ('1128','1455','2171'))
+                             THEN
+                                TC.LCL_NETCAS
+                        END
+               END
+            END
+            END),0) lcltaxbook
+            
+    FROM 
+        TRXCUR TC
+    JOIN 
+        TRXTYP T ON T.TRXTYP = TC.TRXTYP
+    JOIN 
+        FNDMAS F ON TC.FUND = F.FUND
+    JOIN 
+        SECRTY S ON TC.TKR = S.TKR
+    LEFT JOIN 
+        TRXCUR TRC ON TRC.FUND = TC.FUND AND TC.FIRST_TRX = TRC.TRXCUR_NO AND TC.TRXTYP = '2171'
+    LEFT JOIN 
+        TRXCUR OPT ON OPT.FUND = TC.FUND AND OPT.TRXCUR_NO = (
+            CASE WHEN TC.REVFLG = 'N' THEN TC.OPTION_ID
+            ELSE (SELECT OPTION_ID FROM TRXCUR WHERE FUND = TC.FUND AND TRXCUR_NO = TC.REVID AND TC.TRXTYP IN ('1115', '1125', '1135', '1145'))
+            END
+        )
+    LEFT JOIN 
+        GANDL G ON G.FUND = TC.FUND AND G.CLOSE_TRX = TC.TRXCUR_NO AND G.CLSDAT = TC.TRADE_DATE
+    LEFT JOIN 
+        SECRTY S2 ON S2.TKR = OPT.TKR
+    WHERE 
+        TC.tkr=:tkr  AND TC.fund=:fund
+    GROUP BY 
+        TC.FUND, TC.TKR, TC.TAXLOT_ID, TC.TRADE_DATE, TC.QTY ,TC.price 
+     order by trade_date 
+
+"""
+        sql_query = text(query)
+        result = connection.execute(sql_query.params(fund=fund, tkr=tkr))
+        Qty_data = result.fetchall()
+        # Get the column names from the result set
+        columns = result.keys()
+        Cash_data_list = [dict(zip(columns, row)) for row in Qty_data]
+
+        # Close the connection
+        connection.close()
+        # Return the modified data with the new "remaining QTY" column
+        return jsonify({'data': Cash_data_list})
+    except Exception as e:
+        # Log the exception stack trace for debugging
+        print(f"Error in filter_data_for_fund_and_date_range: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
