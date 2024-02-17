@@ -127,11 +127,19 @@ def api_get_fndmas(fund):
 
 @api_getALLFndmas_blueprint.route('/getAllFunds', methods=['GET'])
 def api_getAll_fndmas():
-    fndmas_records = Fndmas.query.filter_by(INACTIVE='N').order_by(asc(Fndmas.FUND)).all()
-    print("All fndmas_records")
-    fndmas_list = [record.to_dict() for record in fndmas_records]
-    json_result = {'data': fndmas_list}
-    return jsonify(json_result)
+
+    try:
+            fndmas_records = Fndmas.query.filter_by(INACTIVE='N').order_by(asc(Fndmas.FUND)).all()
+            print("All fndmas_records")
+            fndmas_list = [record.to_dict() for record in fndmas_records]
+            json_result = {'data': fndmas_list}
+            return jsonify(json_result)
+
+    except Exception as e:
+        # Log the exception stack trace for debugging
+        print(f"Error in another_api: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
 
 @api_getNAVHSTFndmas_blueprint.route('/getNAVHSTFndmas/<string:fund>', methods=['GET'])
 def api_get_NAVHSTfndmas(fund):

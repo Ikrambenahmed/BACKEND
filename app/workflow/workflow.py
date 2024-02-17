@@ -199,7 +199,7 @@ def filter_data_for_fund_and_date_range():
               AND m.close = 'N'
         )
         AND n.close = 'N'
-        AND f.fund = 'MFE'
+        AND f.fund =:fund
 ),
 DateSeries (process_date) AS (
     SELECT dynamic_start_date
