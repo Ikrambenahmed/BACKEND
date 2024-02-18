@@ -1,18 +1,28 @@
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from flask_cors import CORS
+from flask_jwt_extended import jwt_required
 from sqlalchemy import desc, asc
-
 from app.infrastructure.ConnectDB import db, get_shared_connection
 from app.models import PRIHST
 from app.models.FNDMAS import Fndmas
 from app.models.PRIHST import Prihst
 from sqlalchemy import text
 
+from flask_jwt_extended import (
+    create_access_token,
+    create_refresh_token,
+    jwt_required,
+    get_jwt,
+    current_user,
+    get_jwt_identity,
+)
 
 from app.models.GLPRM import Glprm
 from app.infrastructure.ConnectDB import db
 from app.models.NAVHST import Navhst
 import logging
+
+from app.models.USRFND import Usrfnd
 
 api_getFndmas_blueprint = Blueprint('api_get_fndmas', __name__)
 api_getNAVHSTFndmas_blueprint = Blueprint('api_get_Navhstfndmas', __name__)
@@ -20,6 +30,9 @@ api_getALLFndmas_blueprint= Blueprint('api_getALLFndmas', __name__)
 api_getALLPrices_blueprint = Blueprint('api_getALLPrices', __name__)
 api_getCashMovement_blueprint = Blueprint('api_getCashMovement', __name__)
 api_getQtyMovement_blueprint= Blueprint('api_getQtyMovement', __name__)
+api_getUsrFnd_blueprint= Blueprint('api_getUsrFnd', __name__)
+
+CORS(api_getUsrFnd_blueprint)
 CORS(api_getQtyMovement_blueprint)
 CORS(api_getALLFndmas_blueprint)
 CORS(api_getFndmas_blueprint)
@@ -126,6 +139,7 @@ def api_get_fndmas(fund):
     return jsonify(json_result)
 
 @api_getALLFndmas_blueprint.route('/getAllFunds', methods=['GET'])
+@jwt_required()
 def api_getAll_fndmas():
 
     try:
@@ -458,3 +472,44 @@ NVL(SUM(
         print(f"Error in filter_data_for_fund_and_date_range: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+auth_bp = Blueprint("auth", __name__)
+@auth_bp.get("/whoami")
+@jwt_required()
+def whoami():
+    return jsonify(
+        {
+            "message": "message",
+            "user_details": {
+                "username": current_user.username,
+                "email": current_user.email,
+            },
+        }
+    )
+@api_getUsrFnd_blueprint.route('/getUsrFnd', methods=['POST'])
+def api_getUsrFnd():
+    try:
+        # Get UserId from the JSON data
+        user_id = request.json.get('USER_ID')
+
+        if user_id is None:
+            return jsonify({'error': 'UserId is required in the JSON payload'}), 400
+
+        # Query Usrfnd records based on UserId
+        usrfnd_records = Usrfnd.query.filter_by(USER_ID=user_id).order_by(asc(Usrfnd.FUND)).all()
+
+        fnd_list = [record.FUND for record in usrfnd_records]
+
+        # Query FNDMAS records based on FND list and INACTIVE status
+        fndmas_records = Fndmas.query.filter(Fndmas.FUND.in_(fnd_list), Fndmas.INACTIVE == 'N').all()
+
+        # Convert records to a list of dictionaries
+        fndmas_list = [record.to_dict() for record in fndmas_records]
+
+        # Create and return the JSON response
+        json_result = {'data': fndmas_list}
+        return jsonify(json_result)
+
+    except Exception as e:
+        # Log the exception stack trace for debugging
+        print(f"Error in api_getUsrFnd: {str(e)}")
+        return jsonify({'error': str(e)}), 500

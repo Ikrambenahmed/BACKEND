@@ -1,6 +1,8 @@
+
 from flask import jsonify, Blueprint
 import joblib
 from flask import request
+from app.infrastructure.ConnectDB import db, get_shared_connection
 
 import pandas as pd
 import numpy as np
@@ -12,7 +14,9 @@ from scikeras.wrappers import KerasRegressor
 
 from keras.models import Sequential
 from keras.layers import LSTM, Dense
+from sqlalchemy import func, desc, text
 
+from app.models.PRIHST import Prihst
 from app.portfolio.FundDetails import api_getALLPrices_blueprint
 
 api_predictPrices_blueprint = Blueprint('api_predict_prices', __name__)
@@ -20,6 +24,9 @@ api_predictPrices_blueprint = Blueprint('api_predict_prices', __name__)
 api_createModel_blueprint = Blueprint('api_create_model', __name__)
 CORS(api_createModel_blueprint)
 
+
+api_highest_prices_blueprint= Blueprint('api_highest_prices', __name__)
+CORS(api_highest_prices_blueprint)
 
 def load_model(model_path):
     try:
@@ -291,3 +298,48 @@ def create_model():
     except Exception as e:
         print(f"Error creating and saving the model: {e}")
         return jsonify({'error': f'Failed to create and save the model. Exception: {str(e)}'}), 500
+from datetime import datetime
+
+@api_highest_prices_blueprint.route('/highestPriceChange', methods=['GET'])
+def get_highest_price_change():
+    try:
+        connection = get_shared_connection()
+        query = """
+    SELECT TKR
+    FROM PRIHST
+    GROUP BY TKR
+    ORDER BY MAX(PRICE) - MIN(PRICE) DESC
+    FETCH FIRST 1 ROW ONLY
+        """
+        sql_query = text(query)
+
+        # Execute the query and fetch the result
+        tkr = connection.execute(sql_query).fetchone()[0]
+        print(tkr)
+
+        query = text("""
+            SELECT TKR,PRCDATE,PRICE
+            FROM PRIHST
+            WHERE TKR = :tkr order by PRCDATE 
+        """)
+        prices = connection.execute(query.params(tkr=tkr))
+
+        fund_data = prices.fetchall()
+
+        # Check if there is any data
+        if not fund_data:
+            return jsonify({'error': 'No data found'}), 404
+
+        # Extract column names from the first dictionary in the list
+
+        # Convert the result into a list of dictionaries
+
+        # Close the connection
+        prihstdata_list = [dict(row._asdict()) for row in fund_data]
+
+        return jsonify({'prihst_data': prihstdata_list})
+    except Exception as e:
+        # Log the exception stack trace for debugging
+        print(f"Error in filter_data_for_fund_and_date_range: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+

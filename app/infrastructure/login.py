@@ -1,13 +1,13 @@
 import hashlib
 import cx_Oracle
 import sqlalchemy
-from flask_cors import CORS
+from flask_cors import CORS, cross_origin
+from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 from sqlalchemy.exc import SQLAlchemyError
-from app.infrastructure.ConnectDB import init_db, set_db_config, initialize_db
+from sqlalchemy.exc import OperationalError
 
+from app.infrastructure.ConnectDB import init_db, set_db_config, initialize_db
 from app.models.PSWRD import Pswrd
-from app.models.TRXCUR import TRXCUR
-from app.infrastructure.ConnectDB import db
 from flask import Blueprint, current_app
 from flask import jsonify, request
 from sqlalchemy import func, create_engine
@@ -18,16 +18,20 @@ import cx_Oracle
 global_db = None
 
 api_Login_blueprint = Blueprint('api_Login', __name__)
+CORS(api_Login_blueprint)
+
 api_SetDatabase_blueprint=Blueprint('api_SetDatabase', __name__)
 api_TestConnection_blueprint = Blueprint("api_TestConnection", __name__)
 api_Logout_blueprint= Blueprint("api_Logout", __name__)
-CORS(api_Login_blueprint)
-CORS(api_SetDatabase_blueprint)
 api_ConnectToDB_blueprint= Blueprint("api_ConnectToDB", __name__)
+
+CORS(api_ConnectToDB_blueprint)
+CORS(api_TestConnection_blueprint)
+CORS(api_Logout_blueprint)
+CORS(api_SetDatabase_blueprint)
+
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest().upper()
-
-import json
 
 
 @api_Login_blueprint.route('/login', methods=['POST'])
@@ -56,17 +60,20 @@ def login1():
             pswrd = Pswrd.query.filter_by(USER_ID=retrieved_user_id, PSWDHASH=PSWDHASH).first()
 
             if pswrd:
-                return {'login': True, 'message': 'Login successful!'}
-            else:
-                return {'login': False, 'message': 'Incorrect password!'}
+                # Use create_access_token to generate a JWT token
+                access_token = create_access_token(identity=USER_ID)
 
-        return {'login': False, 'message': 'User not found or not authorized!'}
+                # Return the response with the access_token
+                return {'access_token': access_token, 'login_response': {'login': True, 'message': 'Login successful!'}}
+            else:
+                return {'login_response': {'login': False, 'message': 'Incorrect password!'}}
+
+        return {'login_response': {'login': False, 'message': 'User not found or not authorized!'}}
 
     except Exception as e:
         # Log the exception stack trace for debugging
         print(f"Error in login: {str(e)}")
         return {'error': str(e)}, 500
-
 
 @api_TestConnection_blueprint.route("/test_connection", methods=["POST"])
 def test_connection():
@@ -91,15 +98,7 @@ def test_connection():
         print(f"Error in test_connection: {str(e)}")
         return jsonify({"message": f"Database connection failed: {str(e)}", "success": False}), 500
 
-
-
-
-from sqlalchemy.exc import OperationalError
-
-from sqlalchemy.exc import OperationalError
-
 global db_session
-
 
 
 @api_SetDatabase_blueprint.route('/set_database', methods=['POST'])
@@ -130,11 +129,17 @@ def set_database_connection():
         # Check if the connection is successful before proceeding with login
         if connection:
             set_db_config(db_uri)
+            current_app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
+            current_app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+            # Initialize the SQLAlchemy extension with the updated configuration
+
+
             login_response = login(connection, data['USER_ID'], data['pswrd'])
             # Get the current Flask app instance
+            access_token = create_access_token(identity=data['USER_ID'])
 
             # Modify the response based on the login result
-            return jsonify(login_response), 200
+            return jsonify({'login_response': login_response, 'access_token': access_token}), 200
         else:
             return jsonify({'error': 'Failed to connect to the database'}), 500
 
@@ -187,33 +192,15 @@ def login(connection, USER_ID, password):
         print(f"Error in login: {str(e)}")
         return {'error': str(e)}
 
+from flask import current_app, jsonify
+
 def close_database_connection(db_session):
     with current_app.app_context():
-        db_session.remove()
-        db_session = None
-
-        print('inside close',db_session)
-        print("Database connection closed")
-
-@api_Logout_blueprint.route('/logout', methods=['GET'])
-def logout():
-    global db_session
-    db_session = init_db()
-
-    try:
-        close_database_connection(db_session)
-        print(db_session)
-        return jsonify({'message': 'Logout successful'}), 200
-
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-from sqlalchemy.exc import OperationalError
-import os
-import sys
-import signal
-
+        if db_session is not None:
+            db_session.remove()
+            print("Database connection closed")
+        else:
+            print("No active database connection to close")
 
 
 @api_ConnectToDB_blueprint.route('/ConnectDB', methods=['POST'])
@@ -248,3 +235,11 @@ def connect_database():
         # Log the exception stack trace for debugging
         print(f"Error: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+# Example protected route with JWT authentication
+@api_SetDatabase_blueprint.route('/protected', methods=['GET'])
+@jwt_required()
+def protected():
+    # Access the current user's identity using get_jwt_identity()
+    current_user = get_jwt_identity()
+    return jsonify(logged_in_as=current_user), 200

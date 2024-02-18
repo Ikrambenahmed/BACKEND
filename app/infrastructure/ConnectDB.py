@@ -7,6 +7,7 @@ from sqlalchemy.orm import scoped_session, sessionmaker
 
 db = SQLAlchemy()
 db_session = None
+
 def init_dbOLD():
     db_config = get_db_config()
     engine = create_engine(db_config['db_uri'])
@@ -22,18 +23,45 @@ def set_db_config(db_uri):
     with open('database_uri.json', 'w') as json_file:
         json.dump({'db_uri': db_uri}, json_file)
 
-def initialize_db(app, db_uri=None):
+def initialize_db(app,db_uri=None):
+
     if db_uri is None:
       db_uri = get_db_config()['db_uri']
     else:
         # If db_uri is provided during the session, update the file with the new value
       set_db_config(db_uri)
-
     oracle_client_path = r"C:\instantclient-basic-windows.x64-19.21.0.0.0dbru\instantclient_19_21"
     os.environ["PATH"] = oracle_client_path + ";" + os.environ["PATH"]
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'oracle+cx_oracle://username:password@hostname:port/service_name'
 
     app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
+
     db.init_app(app)
+
+from flask import Blueprint, jsonify, current_app
+
+api_Logout_blueprint= Blueprint("api_Logout", __name__)
+
+@api_Logout_blueprint.route('/logout', methods=['GET'])
+def logout():
+    try:
+        # Assuming you have the db_session created during the app context
+        db_session = db.session
+
+        # Call the function with the session
+        close_database_connection(db_session)
+
+        return jsonify({'message': 'Logout successful'}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+def close_database_connection(db_session):
+    with current_app.app_context():
+        if db_session is not None:
+            db_session.remove()
+            print("Database connection closed")
+        else:
+            print("No active database connection to close")
 
 
 def get_db_session():
