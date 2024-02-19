@@ -298,10 +298,10 @@ def create_model():
     except Exception as e:
         print(f"Error creating and saving the model: {e}")
         return jsonify({'error': f'Failed to create and save the model. Exception: {str(e)}'}), 500
-from datetime import datetime
+from datetime import datetime, timedelta
 
-@api_highest_prices_blueprint.route('/highestPriceChange', methods=['GET'])
-def get_highest_price_change():
+
+def get_highest_price_change2():
     try:
         connection = get_shared_connection()
         query = """
@@ -343,3 +343,59 @@ def get_highest_price_change():
         print(f"Error in filter_data_for_fund_and_date_range: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+
+from flask import jsonify
+from sqlalchemy import text
+from datetime import datetime
+
+@api_highest_prices_blueprint.route('/highestPriceChange', methods=['GET'])
+def get_highest_price_change():
+    try:
+        connection = get_shared_connection()
+
+        query = text("""
+           SELECT TKR,
+       PRICE - LAG(PRICE) OVER (PARTITION BY TKR ORDER BY PRCDATE) AS price_change
+FROM PRIHST
+WHERE TKR IS NOT NULL
+  AND EXTRACT(YEAR FROM PRCDATE) = 2024
+ORDER BY TKR, PRCDATE DESC
+        """)
+
+        result = connection.execute(query)
+
+        # Fetch the result
+        rows = result.fetchall()
+        print('rows', rows)
+        if not rows:
+            return jsonify({'error': 'No data found'}), 404
+
+        # Find the ticker with the highest price change
+        max_change_ticker = max(rows, key=lambda x: x[1] if x[1] is not None else 0)
+        print('max_change_ticker', max_change_ticker)
+
+        tkr, highest_change = max_change_ticker[0], max_change_ticker[1]
+        print(tkr, highest_change)
+
+        query = text("""
+                   SELECT TKR,PRCDATE,PRICE
+                   FROM PRIHST
+                   WHERE TKR = :tkr
+                    and PRCDATE >= TO_DATE('01/01/2023', 'MM/DD/YYYY') order by PRCDATE 
+               """)
+        prices = connection.execute(query.params(tkr=tkr))
+
+        fund_data = prices.fetchall()
+
+        # Check if there is any data
+        if not fund_data:
+            return jsonify({'error': 'No data found'}), 404
+
+        prihstdata_list = [dict(row._asdict()) for row in fund_data]
+
+        return jsonify({'highest_change_ticker': tkr,'highest_change':highest_change, 'prihstdata_list': prihstdata_list})
+
+    except Exception as e:
+        # Log the exception stack trace for debugging
+        print(f"Error in get_highest_price_change: {str(e)}")
+        return jsonify({'error': str(e)}), 500
