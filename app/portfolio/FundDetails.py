@@ -139,7 +139,6 @@ def api_get_fndmas(fund):
     return jsonify(json_result)
 
 @api_getALLFndmas_blueprint.route('/getAllFunds', methods=['GET'])
-@jwt_required()
 def api_getAll_fndmas():
 
     try:

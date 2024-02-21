@@ -122,6 +122,7 @@ def set_database_connection():
             # Test the database connection
             engine = create_engine(db_uri)
             connection = engine.connect()
+            print("after engine.connect")
 
             # Your code that uses global_db_connection
 
@@ -131,6 +132,7 @@ def set_database_connection():
             set_db_config(db_uri)
             current_app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
             current_app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+            print("Inside connection if")
             # Initialize the SQLAlchemy extension with the updated configuration
 
 
