@@ -3,10 +3,16 @@ import json
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import create_engine
 from sqlalchemy.orm import scoped_session, sessionmaker
+from dotenv import load_dotenv
+from flask import Blueprint, jsonify, current_app
 
+api_Logout_blueprint= Blueprint("api_Logout", __name__)
 
 db = SQLAlchemy()
+
 db_session = None
+def setDB(newdb):
+    db = newdb
 
 def init_dbOLD():
     db_config = get_db_config()
@@ -25,6 +31,7 @@ def set_db_config(db_uri):
 
 def initialize_db(app,db_uri=None):
 
+    load_dotenv()
     if db_uri is None:
       db_uri = get_db_config()['db_uri']
     else:
@@ -32,15 +39,13 @@ def initialize_db(app,db_uri=None):
       set_db_config(db_uri)
     oracle_client_path = r"C:\instantclient-basic-windows.x64-19.21.0.0.0dbru\instantclient_19_21"
     os.environ["PATH"] = oracle_client_path + ";" + os.environ["PATH"]
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'oracle+cx_oracle://username:password@hostname:port/service_name'
+   # app.config['SQLALCHEMY_DATABASE_URI'] = 'oracle+cx_oracle://username:password@hostname:port/service_name'
 
-    app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
+    app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv("DB_URI")
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
     db.init_app(app)
 
-from flask import Blueprint, jsonify, current_app
-
-api_Logout_blueprint= Blueprint("api_Logout", __name__)
 
 @api_Logout_blueprint.route('/logout', methods=['GET'])
 def logout():

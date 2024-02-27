@@ -157,7 +157,6 @@ def api_getAll_fndmas():
 @api_getNAVHSTFndmas_blueprint.route('/getNAVHSTFndmas/<string:fund>', methods=['GET'])
 def api_get_NAVHSTfndmas(fund):
     navhst_records = Navhst.query.filter_by(FUND=fund).all()
-
     print('navhst records',navhst_records)
     navhst_list = [record.to_dict() for record in navhst_records]
     print('navhst_list',navhst_list)

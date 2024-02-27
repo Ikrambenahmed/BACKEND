@@ -6,12 +6,14 @@ from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identi
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.exc import OperationalError
 
-from app.infrastructure.ConnectDB import init_db, set_db_config, initialize_db
+from app.infrastructure.ConnectDB import init_db, set_db_config, initialize_db, setDB
 from app.models.PSWRD import Pswrd
 from flask import Blueprint, current_app
 from flask import jsonify, request
 from sqlalchemy import func, create_engine
 from sqlalchemy import text
+from app.infrastructure.ConnectDB import db
+from flask_sqlalchemy import SQLAlchemy
 
 from app.models.USERS import Users
 import cx_Oracle
@@ -133,11 +135,9 @@ def set_database_connection():
             current_app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
             current_app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
             print("Inside connection if")
-            # Initialize the SQLAlchemy extension with the updated configuration
-
 
             login_response = login(connection, data['USER_ID'], data['pswrd'])
-            # Get the current Flask app instance
+
             access_token = create_access_token(identity=data['USER_ID'])
 
             # Modify the response based on the login result
