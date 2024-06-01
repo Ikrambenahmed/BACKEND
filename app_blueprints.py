@@ -1,8 +1,8 @@
 from app.PricesPrediction.PreditionModel import api_predictPrices_blueprint, api_createModel_blueprint, \
-    api_highest_prices_blueprint
+    api_highest_prices_blueprint, api_createUseModel_blueprint
 from app.infrastructure.ConnectDB import api_Logout_blueprint
 from app.infrastructure.login import api_SetDatabase_blueprint, api_TestConnection_blueprint, api_ConnectToDB_blueprint, \
-    api_Login_blueprint
+    api_Login_blueprint, api_getProfile_blueprint
 from app.portfolio.FundDetails import api_getFndmas_blueprint, api_getNAVHSTFndmas_blueprint, \
     api_getALLFndmas_blueprint, api_getALLPrices_blueprint, api_getQtyMovement_blueprint, api_getCashMovement_blueprint, \
     auth_bp, api_getUsrFnd_blueprint
@@ -32,6 +32,10 @@ def initialize_blueprints(app):
     app.register_blueprint(api_getTotals_blueprint,url_prefix='/api/')
     app.register_blueprint(api_AssetAllocation_blueprint,url_prefix='/api/')
     app.register_blueprint(api_highest_prices_blueprint,url_prefix='/api/')
+    app.register_blueprint(api_createUseModel_blueprint,url_prefix='/api/')
+    app.register_blueprint(api_getProfile_blueprint,url_prefix='/api/')
+
+
 
 
 

@@ -28,18 +28,25 @@ def get_db_config():
 def set_db_config(db_uri):
     with open('database_uri.json', 'w') as json_file:
         json.dump({'db_uri': db_uri}, json_file)
+def get_database_name(db):
+    # Assuming you have access to the session object associated with the db
+    database_name = db.session.connection().connection.connection.db.name
+    return database_name
 
-def initialize_db(app,db_uri=None):
+
+def initialize_dbnew(app,db_uri=None):
 
     load_dotenv()
     if db_uri is None:
       db_uri = get_db_config()['db_uri']
+      print('db_uri inside file',db_uri) ;
     else:
         # If db_uri is provided during the session, update the file with the new value
       set_db_config(db_uri)
+
+
     oracle_client_path = r"C:\instantclient-basic-windows.x64-19.21.0.0.0dbru\instantclient_19_21"
     os.environ["PATH"] = oracle_client_path + ";" + os.environ["PATH"]
-   # app.config['SQLALCHEMY_DATABASE_URI'] = 'oracle+cx_oracle://username:password@hostname:port/service_name'
 
     app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv("DB_URI")
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -89,7 +96,7 @@ def get_db_session():
     global db_session
     return db_session
 
-def initialize_dbold(app, db_uri=None):
+def initialize_db(app, db_uri=None):
     print('inside initialize_db')
 
     if db_uri is None:

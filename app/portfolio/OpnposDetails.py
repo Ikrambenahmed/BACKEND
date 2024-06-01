@@ -40,7 +40,7 @@ def api_get_Opnpos(fund):
 
         # Close the connection
         connection.close()
-        print(f"fund_data_list",fund_data_list)
+        print(f"open pos tickers",fund_data_list)
 
         return jsonify({'fund_data': fund_data_list})
     except Exception as e:

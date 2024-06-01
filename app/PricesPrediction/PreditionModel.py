@@ -28,11 +28,14 @@ api_predictPrices_blueprint = Blueprint('api_predict_prices', __name__)
 api_createModel_blueprint = Blueprint('api_create_model', __name__)
 CORS(api_createModel_blueprint)
 
-
-api_highest_prices_blueprint= Blueprint('api_highest_prices', __name__)
+api_highest_prices_blueprint = Blueprint('api_highest_prices', __name__)
 CORS(api_highest_prices_blueprint)
 
+api_createUseModel_blueprint = Blueprint('api_createUseModel', __name__)
+CORS(api_createUseModel_blueprint)
+
 from keras.models import load_model as keras_load_model
+
 
 def load_model(model_path):
     try:
@@ -44,12 +47,9 @@ def load_model(model_path):
 
 
 def order_prices_chronologically(prices_data_list):
-
     try:
-        # Convert list of dictionaries to DataFrame
         df = pd.DataFrame(prices_data_list)
 
-        # Ensure that the timestamp column is in datetime format
         df['prcdate'] = pd.to_datetime(df['prcdate'])
 
         # Order prices chronologically based on the timestamp
@@ -58,31 +58,30 @@ def order_prices_chronologically(prices_data_list):
         return ordered_df
 
     except Exception as e:
-        # Log the exception stack trace for debugging
         print(f"Error in order_prices_chronologically: {str(e)}")
-        raise  # You might want to handle or log the exception based on your application's needs
+        raise
+
 
 def handle_null_values(dataframe):
-
     # Example: Drop rows with null values
     cleaned_df = dataframe.dropna()
     print("null values handled")
     return cleaned_df
 
-def scale_data(dataset):
 
-    scaler = MinMaxScaler(feature_range=(0,1))
+def scale_data(dataset):
+    scaler = MinMaxScaler(feature_range=(0, 1))
     scaled_data = scaler.fit_transform(dataset)
     print("data scaled")
 
     return scaled_data, scaler
 
-def create_sequences(data, sequence_length=80):
 
+def create_sequences(data, sequence_length=80):
     x_data, y_data = [], []
 
     for i in range(sequence_length, len(data)):
-        x_data.append(data[i-sequence_length:i, 0])
+        x_data.append(data[i - sequence_length:i, 0])
         y_data.append(data[i, 0])
 
     x_data, y_data = np.array(x_data), np.array(y_data)
@@ -90,8 +89,8 @@ def create_sequences(data, sequence_length=80):
 
     return x_data, y_data
 
-def pre_processData(prices_data_list):
 
+def pre_processData(prices_data_list):
     try:
         # Step 1: Order prices chronologically
         ordered_df = order_prices_chronologically(prices_data_list)
@@ -125,7 +124,6 @@ def pre_processData(prices_data_list):
 
 
 def create_lstm_model(x_train):
-
     print("Enter create lstm model")
 
     model = Sequential()
@@ -134,12 +132,15 @@ def create_lstm_model(x_train):
     model.add(Dense(25, activation='relu'))
     model.add(Dense(1, activation='linear'))
     model.compile(optimizer='adam', loss='mean_squared_error')
+
     return model
+
 
 def train_lstm_model(x_train, y_train, batch_size=32, epochs=10):
     try:
         # Use lambda function to pass parameters to create_lstm_model
-        lstm_model = KerasRegressor(build_fn=lambda: create_lstm_model(x_train), epochs=epochs, batch_size=batch_size, verbose=1)
+        lstm_model = KerasRegressor(build_fn=lambda: create_lstm_model(x_train), epochs=epochs, batch_size=batch_size,
+                                    verbose=1)
 
         param_grid_lstm = {
             'batch_size': [16, 32, 64],
@@ -149,14 +150,18 @@ def train_lstm_model(x_train, y_train, batch_size=32, epochs=10):
 
         print('enter grid search')
 
-        gridsearch_lstm = GridSearchCV(estimator=lstm_model, param_grid=param_grid_lstm, cv=3, scoring='neg_mean_squared_error', n_jobs=-1, error_score=0)
+        gridsearch_lstm = GridSearchCV(estimator=lstm_model, param_grid=param_grid_lstm, cv=3,
+                                       scoring='neg_mean_squared_error', n_jobs=-1, error_score=0)
         print('enter grid search fit')
 
         grid_result_lstm = gridsearch_lstm.fit(x_train, y_train)
-        print('grid_result_lstm :',grid_result_lstm)
+        print('grid_result_lstm :', grid_result_lstm)
         # Get the best hyperparameters
         best_batch_size = grid_result_lstm.best_params_['batch_size']
+        print('best batch size: ', best_batch_size)
         best_epochs = grid_result_lstm.best_params_['epochs']
+        print(' best_epochs: ', best_epochs)
+
         best_optimizer = grid_result_lstm.best_params_['optimizer']
         print('enter final model create')
 
@@ -164,7 +169,7 @@ def train_lstm_model(x_train, y_train, batch_size=32, epochs=10):
         final_model = create_lstm_model(x_train)
 
         print('enter final model fit')
-        print('best_batch_size :',best_batch_size,'best_epochs : ',best_epochs)
+        print('best_batch_size :', best_batch_size, 'best_epochs : ', best_epochs)
         final_model.fit(x_train, y_train, batch_size=best_batch_size, epochs=best_epochs, validation_split=0.2)
 
         return final_model
@@ -226,7 +231,7 @@ def create_model():
             model = load_model(model_filename)
             print('model loaded')
             last_data_point = prices_data_list[-1]
-            print('last_data_point',last_data_point)
+            print('last_data_point', last_data_point)
             print('before data prices')
             data_prices_list = []
             for record in prices_data_list:
@@ -236,12 +241,12 @@ def create_model():
             print('after data prices')
             # Convert the list to a numpy array (assuming it's needed later in your code)
             dataset = np.array(data_prices_list)
-            print('dataset',dataset)
+            print('dataset', dataset)
             dataset = dataset.reshape(-1, 1)
 
             training_data_len = int(np.ceil(len(dataset) * .95))
 
-            print('training_data_len',training_data_len)
+            print('training_data_len', training_data_len)
             scaler = MinMaxScaler(feature_range=(0, 1))
             print('before scaler')
             scaled_data = scaler.fit_transform(dataset)
@@ -321,6 +326,7 @@ def get_highest_price_change():
        PRICE - LAG(PRICE) OVER (PARTITION BY TKR ORDER BY PRCDATE) AS price_change
 FROM PRIHST
 WHERE TKR IS NOT NULL
+and FUND='504'
   AND EXTRACT(YEAR FROM PRCDATE) = 2024
 ORDER BY TKR, PRCDATE DESC
         """)
@@ -356,7 +362,8 @@ ORDER BY TKR, PRCDATE DESC
 
         prihstdata_list = [dict(row._asdict()) for row in fund_data]
 
-        return jsonify({'highest_change_ticker': tkr,'highest_change':highest_change, 'prihstdata_list': prihstdata_list})
+        return jsonify(
+            {'highest_change_ticker': tkr, 'highest_change': highest_change, 'prihstdata_list': prihstdata_list})
 
     except Exception as e:
         # Log the exception stack trace for debugging
@@ -364,3 +371,138 @@ ORDER BY TKR, PRCDATE DESC
         return jsonify({'error': str(e)}), 500
 
 
+import numpy as np
+import pandas as pd
+from sklearn.preprocessing import MinMaxScaler
+from keras.models import Sequential
+from keras.layers import Dense, LSTM
+from keras.utils import to_categorical
+import math
+
+def calculate_percentage_error(actual, predicted):
+    error = np.abs(actual - predicted) / np.abs(actual)
+    percentage_error = np.mean(error) * 100
+    return percentage_error
+
+def trainlstm_model(df, batch_size=4, epochs=32, optimizer='adam'):
+    shape = df.shape[0]
+    df_new = df[['price']]
+    dataset = df_new.values
+    train = df_new[:int(shape * 0.75)]
+    valid = df_new[int(shape * 0.75):]
+
+    scaler = MinMaxScaler(feature_range=(0, 1))
+    scaled_data = scaler.fit_transform(dataset)
+
+    x_train, y_train = [], []
+    for i in range(40, len(train)):
+        x_train.append(scaled_data[i - 40:i, 0])
+        y_train.append(scaled_data[i, 0])
+
+    x_train, y_train = np.array(x_train), np.array(y_train)
+    x_train = np.reshape(x_train, (x_train.shape[0], x_train.shape[1], 1))
+
+    model = Sequential()
+    model.add(LSTM(units=50, return_sequences=True, input_shape=(x_train.shape[1], 1)))
+    model.add(LSTM(units=50))
+    model.add(Dense(1))
+    model.compile(loss='mean_squared_error', optimizer=optimizer)
+
+    model.fit(x_train, y_train, epochs=epochs, batch_size=batch_size, verbose=2)
+
+    return model, scaler, scaled_data
+
+def predict_next_period_prices(df, model, scaler, scaled_data, time_step=40, pred_days=40):
+    # Prepare the test data
+    data = df[["prcdate", "price"]]  # Select Date and Price
+    data = data.rename(columns={"prcdate": "ds", "price": "y"})  # Renaming the columns of the dataset
+
+    data_prices = data.filter(['y'])
+    dataset = data_prices.values
+
+    training_data_len = int(np.ceil(len(dataset) * .95))
+
+    test_data = scaled_data[training_data_len - time_step:, :]
+
+    # Reshape the input for prediction
+    x_input = test_data[len(test_data) - time_step:].reshape(1, -1)
+    temp_input = list(x_input)
+    temp_input = temp_input[0].tolist()
+
+    # Generate predictions for the next pred_days
+    lst_output = []
+    i = 0
+
+    while i < pred_days:
+        if len(temp_input) > time_step:
+            x_input = np.array(temp_input[1:])
+            x_input = x_input.reshape(1, -1)
+            x_input = x_input.reshape((1, time_step, 1))
+
+            yhat = model.predict(x_input, verbose=0)
+            temp_input.extend(yhat[0].tolist())
+            temp_input = temp_input[1:]
+
+            lst_output.extend(yhat.tolist())
+            i += 1
+        else:
+            x_input = np.array(temp_input).reshape((1, time_step, 1))
+            yhat = model.predict(x_input, verbose=0)
+            temp_input.extend(yhat[0].tolist())
+
+            lst_output.extend(yhat.tolist())
+            i += 1
+
+    # Inverse transform the predictions to get actual prices
+    predicted_prices = scaler.inverse_transform(np.array(lst_output).reshape(-1, 1))
+
+    return predicted_prices
+
+
+@api_createUseModel_blueprint.route('/CreateUse/<string:tkr>', methods=['POST'])
+def CreateUsemodel(tkr):
+    try:
+        # Extract JSON data from the POST request
+        json_data = request.get_json()
+
+        # Convert JSON data to DataFrame
+        df_prihst = pd.DataFrame(json_data)
+
+        # Check if the DataFrame is not empty
+        if df_prihst.empty:
+            return jsonify({"error": "Empty DataFrame received"}), 400
+
+        ticker = tkr
+
+        # Check if the model file already exists
+        model_filename = f'D:/Project/{ticker}.h5'
+        if os.path.exists(model_filename):
+            # Load the existing model
+            model = load_model(model_filename)
+            shape = df_prihst.shape[0]
+            df_new = df_prihst[['price']]
+            dataset = df_new.values
+            train = df_new[:int(shape * 0.75)]
+            valid = df_new[int(shape * 0.75):]
+
+            scaler = MinMaxScaler(feature_range=(0, 1))
+            scaled_data = scaler.fit_transform(dataset)
+
+            print('after load model')
+
+        else:
+            print('Creade  model')
+            model, scaler, scaled_data = trainlstm_model(df_prihst, batch_size=4, epochs=32, optimizer='adam')
+
+        if model:
+            # Save the trained model with the ticker as part of the file name
+            model_filename = f'D:/Project/{ticker}.h5'
+            model.save(model_filename)
+
+        predicted_prices = predict_next_period_prices(df_prihst, model, scaler, scaled_data, time_step=40, pred_days=68)
+
+        # Return the predicted prices
+        return jsonify(predicted_prices.tolist()), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

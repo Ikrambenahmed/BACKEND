@@ -26,11 +26,13 @@ api_SetDatabase_blueprint=Blueprint('api_SetDatabase', __name__)
 api_TestConnection_blueprint = Blueprint("api_TestConnection", __name__)
 api_Logout_blueprint= Blueprint("api_Logout", __name__)
 api_ConnectToDB_blueprint= Blueprint("api_ConnectToDB", __name__)
-
+api_getProfile_blueprint= Blueprint("api_getProfile", __name__)
 CORS(api_ConnectToDB_blueprint)
 CORS(api_TestConnection_blueprint)
 CORS(api_Logout_blueprint)
 CORS(api_SetDatabase_blueprint)
+CORS(api_getProfile_blueprint)
+
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest().upper()
@@ -70,7 +72,7 @@ def login1():
             else:
                 return {'login_response': {'login': False, 'message': 'Incorrect password!'}}
 
-        return {'login_response': {'login': False, 'message': 'User not found or not authorized!'}}
+        return {'login_response': {'login': False, 'message': 'User not found !'}}
 
     except Exception as e:
         # Log the exception stack trace for debugging
@@ -245,3 +247,23 @@ def protected():
     # Access the current user's identity using get_jwt_identity()
     current_user = get_jwt_identity()
     return jsonify(logged_in_as=current_user), 200
+
+@api_getProfile_blueprint.route('/getProfile/<string:USER_ID>', methods=['GET'])
+def api_get_Opnpos(USER_ID):
+    try:
+        user = Users.query.filter_by(USER_ID=USER_ID).first()
+
+        # Check if user exists
+        if user:
+            print(f"user:",user)
+            user_dict = user.to_dict()
+            print(f"user:",user_dict)
+
+            return jsonify({'user': user_dict})
+        else:
+            return jsonify({'error': 'User not found'}), 404
+
+    except Exception as e:
+        # Log the exception stack trace for debugging
+        print(f"Error in filter user: {str(e)}")
+        return jsonify({'error': str(e)}), 500
